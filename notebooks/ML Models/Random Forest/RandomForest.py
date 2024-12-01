@@ -2,6 +2,7 @@ from DecisionTree import DecisionTree
 import pandas as pd
 import numpy as np
 from collections import Counter
+from concurrent.futures import ProcessPoolExecutor
 
 
 class RandomForest:
@@ -21,6 +22,7 @@ class RandomForest:
             X_sample, y_sample = self._bootstrap_samples(X, y)
             tree.fit(X_sample, y_sample)
             self.trees.append(tree)
+
 
     def _bootstrap_samples(self, X, y):
         n_samples = X.shape[0]

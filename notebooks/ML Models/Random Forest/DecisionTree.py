@@ -111,6 +111,6 @@ class DecisionTree:
         if node.is_leaf_node():
             return node.value
 
-        if x[node.feature] <= node.threshold:
+        if x.iloc[node.feature] <= node.threshold:
             return self._traverse_tree(x, node.left)
         return self._traverse_tree(x, node.right)

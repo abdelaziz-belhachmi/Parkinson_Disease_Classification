@@ -5,6 +5,7 @@ import shap
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import cross_val_score
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 # Step 1: Load train and test data
@@ -29,16 +30,10 @@ lgbm_model.fit(X_train, y_train)
 # Step 3: Compute SHAP values
 explainer = shap.TreeExplainer(lgbm_model)
 shap_values = explainer.shap_values(X_train)
-# pd.DataFrame(shap_values).to_csv("../../data/processed/shap/shapvalues.csv", index=False)
-#
-# shap.summary_plot(shap_values, X_train,max_display=len(X_train.columns))
-# shap.summary_plot(shap_values, X_train, plot_type="bar", max_display=len(X_train.columns))
-#
-
-import seaborn as sns
 
 # Compute the mean absolute SHAP values for each feature
 mean_abs_shap_values = np.abs(shap_values).mean(axis=0)  # Use shap_values[1] for the positive class in binary classification
+mnabsshapval = np.mean(mean_abs_shap_values)
 
 # Create a DataFrame for visualization
 shap_importance_df = pd.DataFrame({
@@ -46,7 +41,7 @@ shap_importance_df = pd.DataFrame({
     "Mean Absolute SHAP Value": mean_abs_shap_values
 }).sort_values(by="Mean Absolute SHAP Value", ascending=False)
 
-mnabsshapval = np.mean(mean_abs_shap_values)
+
 # Plot the distribution of mean absolute SHAP values
 plt.figure(figsize=(10, 6))
 sns.histplot(mean_abs_shap_values, bins=20, kde=True, color="skyblue")
@@ -57,28 +52,53 @@ plt.ylabel("Frequency")
 plt.legend()
 plt.show()
 
-# Optionally, show the sorted feature importance for reference
-print(shap_importance_df)
+# Drop features with SHAP values less than the mean
+features_to_keep = shap_importance_df[shap_importance_df["Mean Absolute SHAP Value"] > mnabsshapval]["Feature"]
+X_train_reduced1 = X_train[features_to_keep]
+X_test_reduced1 = X_test[features_to_keep]
 
+# Recalculate SHAP importance after the first reduction
+shap_importance_df_reduced = shap_importance_df[shap_importance_df["Feature"].isin(features_to_keep)].reset_index(drop=True)
 
-# Identify features with null SHAP values (mean absolute SHAP value == 0)
-null_shap_features = shap_importance_df[shap_importance_df["Mean Absolute SHAP Value"] <= mnabsshapval]["Feature"]
+# Compute cumulative contribution
+shap_importance_df_reduced["Cumulative Contribution"] = shap_importance_df_reduced[
+    "Mean Absolute SHAP Value"
+].cumsum() / shap_importance_df_reduced["Mean Absolute SHAP Value"].sum()
 
-# Drop these features from the datasets
-X_train_reduced = X_train.drop(columns=null_shap_features)
-X_test_reduced = X_test.drop(columns=null_shap_features)
+# Plot cumulative contribution
+plt.figure(figsize=(12, 6))
+plt.plot(
+    range(1, len(shap_importance_df_reduced) + 1),
+    shap_importance_df_reduced["Cumulative Contribution"],
+    marker="o",
+    linestyle="-",
+    color="blue",
+    label="Cumulative Contribution"
+)
+plt.axhline(y=0.75, color="red", linestyle="--", label="75% Threshold")
+plt.title("Cumulative Contribution of SHAP Values")
+plt.xlabel("Number of Features")
+plt.ylabel("Cumulative Contribution")
+plt.legend()
+plt.grid()
+plt.show()
 
-X_train_df = pd.DataFrame(X_train_reduced)
-X_test_df = pd.DataFrame(X_test_reduced)
+# Keep features contributing up to 75%
+selected_features = shap_importance_df_reduced[
+    shap_importance_df_reduced["Cumulative Contribution"] <= 0.75
+]["Feature"]
 
-train_combined = pd.concat([X_train_df, y_train], axis=1)
-test_combined = pd.concat([X_test_df, y_test], axis=1)
+# Final reduced dataset
+X_train_reduced2 = X_train_reduced1[selected_features]
+X_test_reduced2 = X_test_reduced1[selected_features]
 
 # Save combined datasets to CSV
-train_combined.to_csv("../../data/processed/afterDroplessThanMean_Shap_train_data.csv", index=False)
-test_combined.to_csv("../../data/processed/afterDroplessThanMean_Shap_test_data.csv", index=False)
+train_combined = pd.concat([X_train_reduced2, y_train], axis=1)
+test_combined = pd.concat([X_test_reduced2, y_test], axis=1)
 
+train_combined.to_csv("../../data/processed/afterDroplessThanMean_Shap_train_data2.csv", index=False)
+test_combined.to_csv("../../data/processed/afterDroplessThanMean_Shap_test_data2.csv", index=False)
 
 print(f"Original number of features: {X_train.shape[1]}")
-print(f"Number of features after dropping null SHAP features: {X_train_reduced.shape[1]}")
-print(f"Features dropped: {list(null_shap_features)}")
+print(f"Number of features after dropping SHAP < mean: {X_train_reduced1.shape[1]}")
+print(f"Number of features after cumulative contribution: {X_train_reduced2.shape[1]}")

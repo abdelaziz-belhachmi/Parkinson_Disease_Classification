@@ -19,7 +19,7 @@ def accuracy(y_true, y_pred):
     accuracy = np.sum(y_true == y_pred) / len(y_true)
     return accuracy
 
-clf = RandomForest(n_trees=20)
+clf = RandomForest(n_trees=1)
 clf.fit(X_train, y_train)
 predictions = clf.predict(X_test)
 
